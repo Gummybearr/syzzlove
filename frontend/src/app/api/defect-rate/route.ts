@@ -19,6 +19,7 @@ export async function GET(request: Request) {
     let data = records.map((record: any) => ({
       ModelID: record.ModelID,
       LotID: record.LotID,
+      DefectDate: record.DefectDate,
       DefectRate: parseFloat(record.DefectRate)
     }));
 

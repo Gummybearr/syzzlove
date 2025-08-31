@@ -38,6 +38,8 @@ import {
 import {
   ScatterChart,
   Scatter,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -80,6 +82,7 @@ const lightTheme = createTheme({
 type DefectRateData = {
   ModelID: string;
   LotID: string;
+  DefectDate: string;
   DefectRate: number;
 };
 
@@ -196,13 +199,18 @@ export default function Home() {
     if (!Array.isArray(defectRateData) || defectRateData.length === 0) return [];
     const filteredData = defectRateData
       .filter(item => selectedModels.includes(item.ModelID))
-      .map((item, index) => ({
-        lotId: item.LotID,
-        defectRate: item.DefectRate,
-        modelId: item.ModelID,
-        index: index
-      }))
-      .sort((a, b) => a.lotId.localeCompare(b.lotId));
+      .map((item) => {
+        const dateObj = new Date(item.DefectDate);
+        return {
+          lotId: item.LotID,
+          defectRate: item.DefectRate,
+          modelId: item.ModelID,
+          date: item.DefectDate,
+          dateObj: dateObj,
+          dateTimestamp: dateObj.getTime()
+        };
+      })
+      .sort((a, b) => a.dateTimestamp - b.dateTimestamp);
     return filteredData;
   };
 
@@ -387,17 +395,17 @@ export default function Home() {
             Defect Rate by Lot (선택된 모델)
           </Typography>
           <ResponsiveContainer width="100%" height={300}>
-            <ScatterChart>
+            <ScatterChart data={getDefectRateChartData()}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
-                dataKey="index" 
+                dataKey="dateTimestamp"
                 type="number"
-                tick={{ fontSize: 10 }}
+                scale="time"
+                domain={['dataMin', 'dataMax']}
                 tickFormatter={(value) => {
-                  const data = getDefectRateChartData();
-                  return data[value]?.lotId || '';
+                  const date = new Date(value);
+                  return `${date.getMonth() + 1}/${date.getDate()}`;
                 }}
-                domain={[0, getDefectRateChartData().length - 1]}
               />
               <YAxis dataKey="defectRate" type="number" />
               <Tooltip 
@@ -412,6 +420,7 @@ export default function Home() {
                         borderRadius: '4px',
                         boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                       }}>
+                        <p style={{ margin: '2px 0' }}>{`Date: ${data.date}`}</p>
                         <p style={{ margin: '2px 0' }}>{`Lot: ${data.lotId}`}</p>
                         <p style={{ margin: '2px 0' }}>{`Model: ${data.modelId}`}</p>
                         <p style={{ margin: '2px 0' }}>{`Defect Rate: ${data.defectRate}%`}</p>
@@ -423,13 +432,12 @@ export default function Home() {
               />
               <Legend />
               {selectedModels.map((modelId) => {
-                const modelData = getDefectRateChartData().filter(item => item.modelId === modelId);
                 const colors = getModelColors();
                 return (
                   <Scatter
                     key={modelId}
                     name={modelId}
-                    data={modelData}
+                    data={getDefectRateChartData().filter(item => item.modelId === modelId)}
                     fill={colors[modelId]}
                   />
                 );
