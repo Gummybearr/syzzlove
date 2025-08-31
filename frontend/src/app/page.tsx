@@ -520,17 +520,19 @@ export default function Home() {
           </Typography>
           {selectedParameter && (
             <ResponsiveContainer width="100%" height={400}>
-              <ScatterChart data={getParameterChartData()}>
+              <ScatterChart data={getParameterChartData()} margin={{ top: 20, right: 30, bottom: 50, left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
                   dataKey="paramValue" 
                   type="number"
                   name={selectedParameter}
+                  label={{ value: selectedParameter, position: 'insideBottom', offset: -5 }}
                 />
                 <YAxis 
                   dataKey="defectRate" 
                   type="number"
                   name="Defect Rate"
+                  label={{ value: 'Defect Rate (%)', angle: -90, position: 'insideLeft' }}
                 />
                 <Tooltip 
                   formatter={(value, name) => [value, name]}
@@ -562,7 +564,7 @@ export default function Home() {
           </Typography>
           {selectedParameter && (
             <ResponsiveContainer width="100%" height={400}>
-              <ScatterChart data={getParameterTimeSeriesData()}>
+              <ScatterChart data={getParameterTimeSeriesData()} margin={{ top: 20, right: 30, bottom: 50, left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
                   dataKey="dateTimestamp"
@@ -574,8 +576,13 @@ export default function Home() {
                     return `${date.getMonth() + 1}/${date.getDate()}`;
                   }}
                   tick={{ fontSize: 10 }}
+                  label={{ value: 'Date', position: 'insideBottom', offset: -5 }}
                 />
-                <YAxis dataKey="paramValue" type="number" />
+                <YAxis 
+                  dataKey="paramValue" 
+                  type="number"
+                  label={{ value: selectedParameter, angle: -90, position: 'insideLeft' }}
+                />
                 <Tooltip 
                   content={({ active, payload }) => {
                     if (active && payload && payload.length) {
