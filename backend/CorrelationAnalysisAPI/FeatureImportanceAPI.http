@@ -1,0 +1,21 @@
+### Feature Importance Analysis API Test
+
+POST http://localhost:5000/api/feature-importance/analyze
+Content-Type: application/json
+
+{
+  "DateFrom": "2024-01-01T00:00:00Z",
+  "DateTo": "2024-12-31T23:59:59Z",
+  "ModelIds": ["MODEL_A", "MODEL_B", "MODEL_C"]
+}
+
+### Alternative test with different date range
+
+POST http://localhost:5000/api/feature-importance/analyze
+Content-Type: application/json
+
+{
+  "DateFrom": "2024-06-01T00:00:00Z",
+  "DateTo": "2024-09-30T23:59:59Z",
+  "ModelIds": ["MODEL_A"]
+}
