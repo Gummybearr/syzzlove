@@ -229,6 +229,27 @@ export default function Home() {
     }));
   };
 
+  const getRegressionLine = (data: any[]) => {
+    if (data.length < 2) return [];
+    
+    const n = data.length;
+    const sumX = data.reduce((sum, point) => sum + point.paramValue, 0);
+    const sumY = data.reduce((sum, point) => sum + point.defectRate, 0);
+    const sumXY = data.reduce((sum, point) => sum + point.paramValue * point.defectRate, 0);
+    const sumX2 = data.reduce((sum, point) => sum + point.paramValue * point.paramValue, 0);
+    
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+    
+    const minX = Math.min(...data.map(d => d.paramValue));
+    const maxX = Math.max(...data.map(d => d.paramValue));
+    
+    return [
+      { paramValue: minX, regressionY: slope * minX + intercept },
+      { paramValue: maxX, regressionY: slope * maxX + intercept }
+    ];
+  };
+
   const getFeatureImportanceChartData = () => {
     if (!featureResult || !featureResult.results) return [];
     
@@ -551,7 +572,17 @@ export default function Home() {
                     return null;
                   }}
                 />
+                <Legend />
                 <Scatter name="Data Points" data={getParameterChartData()} fill="#8884d8" />
+                <Line 
+                  type="linear" 
+                  dataKey="regressionY" 
+                  data={getRegressionLine(getParameterChartData())}
+                  stroke="#ff7300" 
+                  strokeWidth={2}
+                  dot={false}
+                  name="Regression Line"
+                />
               </ScatterChart>
             </ResponsiveContainer>
           )}
