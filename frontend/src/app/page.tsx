@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { apiClient } from '@/lib/api';
 import { 
   Box, 
@@ -25,12 +25,27 @@ import {
   Select,
   MenuItem,
   Chip,
-  OutlinedInput
+  OutlinedInput,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText
 } from '@mui/material';
 import { 
   Analytics, 
   TrendingUp 
 } from '@mui/icons-material';
+import {
+  ScatterChart,
+  Scatter,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+  Cell
+} from 'recharts';
 
 const lightTheme = createTheme({
   palette: {
@@ -62,14 +77,24 @@ const lightTheme = createTheme({
   },
 });
 
-const modelOptions = Array.from({ length: 50 }, (_, i) => 
-  `Model${String(i + 1).padStart(3, '0')}`
-);
+type DefectRateData = {
+  ModelID: string;
+  LotID: string;
+  DefectRate: number;
+};
+
+type ParamsData = {
+  LotID: string;
+  DateTime: string;
+  Type: string;
+  Value: number;
+};
 
 export default function Home() {
   const [dateFrom, setDateFrom] = useState('2024-01-01');
   const [dateTo, setDateTo] = useState('2024-12-31');
-  const [selectedModels, setSelectedModels] = useState<string[]>(['Model001', 'Model002']);
+  const [selectedModels, setSelectedModels] = useState<string[]>([]);
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
   
   const [correlationLoading, setCorrelationLoading] = useState(false);
   const [correlationResult, setCorrelationResult] = useState<any>(null);
@@ -78,28 +103,73 @@ export default function Home() {
   const [featureLoading, setFeatureLoading] = useState(false);
   const [featureResult, setFeatureResult] = useState<any>(null);
   const [featureError, setFeatureError] = useState<string | null>(null);
+  
+  const [defectRateData, setDefectRateData] = useState<DefectRateData[]>([]);
+  const [paramsData, setParamsData] = useState<ParamsData[]>([]);
+  const [selectedParameter, setSelectedParameter] = useState<string>('');
+  const [correlationFactors, setCorrelationFactors] = useState(['thickness', 'temperature', 'humidity']);
+
+  useEffect(() => {
+    loadModels();
+    loadData();
+  }, []);
+
+  const loadModels = async () => {
+    try {
+      const response = await fetch('/api/models');
+      const models = await response.json();
+      setModelOptions(models);
+      if (models.length > 0 && selectedModels.length === 0) {
+        setSelectedModels(models.slice(0, 2));
+      }
+    } catch (error) {
+      console.error('Error loading models:', error);
+    }
+  };
+
+  const loadData = async (modelIds: string[] = selectedModels) => {
+    try {
+      const modelIdsParam = modelIds.join(',');
+      
+      const defectResponse = await fetch(`/api/defect-rate?modelIds=${modelIdsParam}`);
+      const defectData = await defectResponse.json();
+      setDefectRateData(defectData);
+      
+      const paramsResponse = await fetch(`/api/params?modelIds=${modelIdsParam}`);
+      const paramData = await paramsResponse.json();
+      setParamsData(paramData);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    }
+  };
 
   const handleAnalysis = async () => {
+    // 먼저 선택된 모델의 데이터를 다시 로드
+    await loadData(selectedModels);
+    
     const data = {
       dateFrom,
       dateTo,
       modelIds: selectedModels,
     };
 
-    // Correlation Analysis
     setCorrelationLoading(true);
     setCorrelationError(null);
     setCorrelationResult(null);
 
-    // Feature Importance Analysis
     setFeatureLoading(true);
     setFeatureError(null);
     setFeatureResult(null);
 
-    // Run both APIs simultaneously
     const correlationPromise = apiClient.analyzeCorrelation(data)
       .then(result => {
         setCorrelationResult(result);
+        if (result.results) {
+          const sortedFactors = result.results
+            .sort((a: any, b: any) => Math.abs(b.correlationCoefficient) - Math.abs(a.correlationCoefficient))
+            .map((item: any) => item.parameterType);
+          setCorrelationFactors(sortedFactors);
+        }
       })
       .catch(err => {
         setCorrelationError(err instanceof Error ? err.message : 'An error occurred');
@@ -120,6 +190,41 @@ export default function Home() {
       });
 
     await Promise.all([correlationPromise, featurePromise]);
+  };
+
+  const getDefectRateChartData = () => {
+    if (!Array.isArray(defectRateData) || defectRateData.length === 0) return [];
+    const filteredData = defectRateData
+      .filter(item => selectedModels.includes(item.ModelID))
+      .map((item, index) => ({
+        lotId: item.LotID,
+        defectRate: item.DefectRate,
+        modelId: item.ModelID,
+        index: index
+      }))
+      .sort((a, b) => a.lotId.localeCompare(b.lotId));
+    return filteredData;
+  };
+
+  const getParameterChartData = () => {
+    if (!selectedParameter || !Array.isArray(paramsData) || !Array.isArray(defectRateData)) return [];
+    
+    const parameterData = paramsData.filter(item => item.Type === selectedParameter);
+    const defectMap = new Map(defectRateData.map(item => [item.LotID, item.DefectRate]));
+    
+    return parameterData.map(item => ({
+      paramValue: item.Value,
+      defectRate: defectMap.get(item.LotID) || 0,
+      lotId: item.LotID
+    }));
+  };
+
+  const getModelColors = () => {
+    const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1'];
+    return selectedModels.reduce((acc, model, index) => {
+      acc[model] = colors[index % colors.length];
+      return acc;
+    }, {} as Record<string, string>);
   };
 
   const AnalysisResultCard = ({ 
@@ -276,8 +381,145 @@ export default function Home() {
           </Grid>
         </Paper>
 
-        {/* Results */}
+        {/* 상단 Defect Rate 산점도 */}
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Defect Rate by Lot (선택된 모델)
+          </Typography>
+          <ResponsiveContainer width="100%" height={300}>
+            <ScatterChart>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="index" 
+                type="number"
+                tick={{ fontSize: 10 }}
+                tickFormatter={(value) => {
+                  const data = getDefectRateChartData();
+                  return data[value]?.lotId || '';
+                }}
+                domain={[0, getDefectRateChartData().length - 1]}
+              />
+              <YAxis dataKey="defectRate" type="number" />
+              <Tooltip 
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    const data = payload[0].payload;
+                    return (
+                      <div style={{ 
+                        backgroundColor: 'white', 
+                        padding: '10px', 
+                        border: '1px solid #ccc', 
+                        borderRadius: '4px',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                      }}>
+                        <p style={{ margin: '2px 0' }}>{`Lot: ${data.lotId}`}</p>
+                        <p style={{ margin: '2px 0' }}>{`Model: ${data.modelId}`}</p>
+                        <p style={{ margin: '2px 0' }}>{`Defect Rate: ${data.defectRate}%`}</p>
+                      </div>
+                    );
+                  }
+                  return null;
+                }}
+              />
+              <Legend />
+              {selectedModels.map((modelId) => {
+                const modelData = getDefectRateChartData().filter(item => item.modelId === modelId);
+                const colors = getModelColors();
+                return (
+                  <Scatter
+                    key={modelId}
+                    name={modelId}
+                    data={modelData}
+                    fill={colors[modelId]}
+                  />
+                );
+              })}
+            </ScatterChart>
+          </ResponsiveContainer>
+        </Paper>
+
+        {/* 하단 레이아웃 */}
         <Grid container spacing={3}>
+          {/* 좌측 상관관계 인자 리스트 */}
+          <Grid item xs={12} md={4}>
+            <Paper sx={{ p: 2, height: '400px' }}>
+              <Typography variant="h6" gutterBottom>
+                상관관계 혐의인자
+              </Typography>
+              <List>
+                {correlationFactors.map((factor) => {
+                  const correlationInfo = correlationResult?.results?.find(
+                    (r: any) => r.parameterType === factor
+                  );
+                  return (
+                    <ListItem key={factor} disablePadding>
+                      <ListItemButton
+                        selected={selectedParameter === factor}
+                        onClick={() => setSelectedParameter(factor)}
+                      >
+                        <ListItemText 
+                          primary={factor}
+                          secondary={
+                            correlationInfo 
+                              ? `r=${correlationInfo.correlationCoefficient.toFixed(3)} (${correlationInfo.interpretation})`
+                              : ''
+                          }
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  );
+                })}
+              </List>
+            </Paper>
+          </Grid>
+          
+          {/* 우측 파라미터별 산점도 */}
+          <Grid item xs={12} md={8}>
+            <Paper sx={{ p: 2, height: '400px' }}>
+              <Typography variant="h6" gutterBottom>
+                {selectedParameter ? `${selectedParameter} vs Defect Rate` : '파라미터를 선택하세요'}
+              </Typography>
+              {selectedParameter && (
+                <ResponsiveContainer width="100%" height={300}>
+                  <ScatterChart data={getParameterChartData()}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="paramValue" 
+                      type="number"
+                      name={selectedParameter}
+                    />
+                    <YAxis 
+                      dataKey="defectRate" 
+                      type="number"
+                      name="Defect Rate"
+                    />
+                    <Tooltip 
+                      formatter={(value, name) => [value, name]}
+                      labelFormatter={(label) => `Lot: ${label}`}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-white p-2 border border-gray-300 rounded shadow">
+                              <p>{`Lot: ${data.lotId}`}</p>
+                              <p>{`${selectedParameter}: ${data.paramValue}`}</p>
+                              <p>{`Defect Rate: ${data.defectRate}%`}</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Scatter name="Data Points" data={getParameterChartData()} fill="#8884d8" />
+                  </ScatterChart>
+                </ResponsiveContainer>
+              )}
+            </Paper>
+          </Grid>
+        </Grid>
+
+        {/* 기존 분석 결과 */}
+        <Grid container spacing={3} sx={{ mt: 2 }}>
           <Grid item xs={12} md={6}>
             <AnalysisResultCard
               title="상관관계 분석"
