@@ -401,7 +401,7 @@ export default function Home() {
                 dataKey="dateTimestamp"
                 type="number"
                 scale="time"
-                domain={['dataMin', 'dataMax']}
+                domain={[(dataMin) => dataMin - (86400000 * 10), (dataMax) => dataMax + (86400000 * 10)]}
                 tickFormatter={(value) => {
                   const date = new Date(value);
                   return `${date.getMonth() + 1}/${date.getDate()}`;
