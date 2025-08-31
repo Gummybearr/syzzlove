@@ -40,6 +40,8 @@ import {
   Scatter,
   LineChart,
   Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -225,6 +227,19 @@ export default function Home() {
       defectRate: defectMap.get(item.LotID) || 0,
       lotId: item.LotID
     }));
+  };
+
+  const getFeatureImportanceChartData = () => {
+    if (!featureResult || !featureResult.results) return [];
+    
+    return featureResult.results
+      .sort((a: any, b: any) => b.importance - a.importance)
+      .map((item: any) => ({
+        name: item.parameterType,
+        importance: item.importance,
+        formattedImportance: (item.importance * 100).toFixed(1),
+        interpretation: item.interpretation
+      }));
   };
 
   const getModelColors = () => {
@@ -481,8 +496,8 @@ export default function Home() {
             </Paper>
           </Grid>
           
-          {/* 우측 파라미터별 산점도 */}
-          <Grid item xs={12} md={8}>
+          {/* 우측 상단: 파라미터별 산점도 */}
+          <Grid item xs={12} md={4}>
             <Paper sx={{ p: 2, height: '400px' }}>
               <Typography variant="h6" gutterBottom>
                 {selectedParameter ? `${selectedParameter} vs Defect Rate` : '파라미터를 선택하세요'}
@@ -521,6 +536,67 @@ export default function Home() {
                     <Scatter name="Data Points" data={getParameterChartData()} fill="#8884d8" />
                   </ScatterChart>
                 </ResponsiveContainer>
+              )}
+            </Paper>
+          </Grid>
+
+          {/* 우측 하단: Feature Importance */}
+          <Grid item xs={12} md={4}>
+            <Paper sx={{ p: 2, height: '400px' }}>
+              <Typography variant="h6" gutterBottom>
+                Feature Importance
+              </Typography>
+              {featureResult && featureResult.results ? (
+                <>
+                  <div style={{ fontSize: '12px', marginBottom: '10px' }}>
+                    {JSON.stringify(getFeatureImportanceChartData(), null, 2)}
+                  </div>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart 
+                      data={getFeatureImportanceChartData()} 
+                      layout="vertical"
+                      margin={{ top: 5, right: 30, left: 80, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        type="number" 
+                        domain={[0, 'dataMax']}
+                      />
+                      <YAxis 
+                        dataKey="name" 
+                        type="category" 
+                        width={70}
+                        tick={{ fontSize: 11 }}
+                      />
+                      <Tooltip 
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            return (
+                              <div style={{ 
+                                backgroundColor: 'white', 
+                                padding: '10px', 
+                                border: '1px solid #ccc', 
+                                borderRadius: '4px',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                              }}>
+                                <p style={{ margin: '2px 0' }}>{`Parameter: ${data.name}`}</p>
+                                <p style={{ margin: '2px 0' }}>{`Importance: ${data.formattedImportance}%`}</p>
+                                <p style={{ margin: '2px 0' }}>{`Level: ${data.interpretation}`}</p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Bar dataKey="importance" fill="#82ca9d" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </>
+              ) : (
+                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 10 }}>
+                  분석을 실행하여 Feature Importance 결과를 확인하세요.
+                </Typography>
               )}
             </Paper>
           </Grid>
