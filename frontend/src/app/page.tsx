@@ -365,7 +365,7 @@ export default function Home() {
       <AppBar position="static" elevation={1}>
         <Toolbar>
           <Typography variant="h6" component="h1" sx={{ flexGrow: 1 }}>
-            DAS
+            Put your title here
           </Typography>
           <Button 
             sx={{ color: '#000000' }} 
