@@ -242,6 +242,28 @@ export default function Home() {
       }));
   };
 
+  const getParameterTimeSeriesData = () => {
+    if (!selectedParameter || !Array.isArray(paramsData)) return [];
+    
+    const parameterData = paramsData
+      .filter(item => item.Type === selectedParameter)
+      .filter(item => selectedModels.some(modelId => item.LotID.includes(modelId)))
+      .map((item) => {
+        const dateObj = new Date(item.DateTime);
+        return {
+          lotId: item.LotID,
+          paramValue: item.Value,
+          date: item.DateTime,
+          dateObj: dateObj,
+          dateTimestamp: dateObj.getTime(),
+          modelId: item.LotID.split('_')[0]
+        };
+      })
+      .sort((a, b) => a.dateTimestamp - b.dateTimestamp);
+    
+    return parameterData;
+  };
+
   const getModelColors = () => {
     const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1'];
     return selectedModels.reduce((acc, model, index) => {
@@ -461,146 +483,196 @@ export default function Home() {
           </ResponsiveContainer>
         </Paper>
 
-        {/* 하단 레이아웃 */}
-        <Grid container spacing={3}>
-          {/* 좌측 상관관계 인자 리스트 */}
-          <Grid item xs={12} md={4}>
-            <Paper sx={{ p: 2, height: '400px' }}>
-              <Typography variant="h6" gutterBottom>
-                상관관계 혐의인자
-              </Typography>
-              <List>
-                {correlationFactors.map((factor) => {
-                  const correlationInfo = correlationResult?.results?.find(
-                    (r: any) => r.parameterType === factor
-                  );
+        {/* 상관관계 혐의인자 리스트 */}
+        <Paper sx={{ p: 2, mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            상관관계 혐의인자
+          </Typography>
+          <Grid container spacing={2}>
+            {correlationFactors.map((factor) => {
+              const correlationInfo = correlationResult?.results?.find(
+                (r: any) => r.parameterType === factor
+              );
+              return (
+                <Grid item key={factor}>
+                  <Button
+                    variant={selectedParameter === factor ? "contained" : "outlined"}
+                    onClick={() => setSelectedParameter(factor)}
+                    size="small"
+                  >
+                    {factor}
+                    {correlationInfo && (
+                      <Typography variant="caption" sx={{ ml: 1 }}>
+                        (r={correlationInfo.correlationCoefficient.toFixed(3)})
+                      </Typography>
+                    )}
+                  </Button>
+                </Grid>
+              );
+            })}
+          </Grid>
+        </Paper>
+
+        {/* 파라미터별 산점도 */}
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            {selectedParameter ? `${selectedParameter} vs Defect Rate` : '파라미터를 선택하세요'}
+          </Typography>
+          {selectedParameter && (
+            <ResponsiveContainer width="100%" height={400}>
+              <ScatterChart data={getParameterChartData()}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey="paramValue" 
+                  type="number"
+                  name={selectedParameter}
+                />
+                <YAxis 
+                  dataKey="defectRate" 
+                  type="number"
+                  name="Defect Rate"
+                />
+                <Tooltip 
+                  formatter={(value, name) => [value, name]}
+                  labelFormatter={(label) => `Lot: ${label}`}
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div className="bg-white p-2 border border-gray-300 rounded shadow">
+                          <p>{`Lot: ${data.lotId}`}</p>
+                          <p>{`${selectedParameter}: ${data.paramValue}`}</p>
+                          <p>{`Defect Rate: ${data.defectRate}%`}</p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Scatter name="Data Points" data={getParameterChartData()} fill="#8884d8" />
+              </ScatterChart>
+            </ResponsiveContainer>
+          )}
+        </Paper>
+
+        {/* 선택된 파라미터의 시계열 그래프 */}
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            {selectedParameter ? `${selectedParameter} Time Series` : '파라미터를 선택하세요'}
+          </Typography>
+          {selectedParameter && (
+            <ResponsiveContainer width="100%" height={400}>
+              <ScatterChart data={getParameterTimeSeriesData()}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey="dateTimestamp"
+                  type="number"
+                  scale="time"
+                  domain={[(dataMin) => dataMin - (86400000 * 5), (dataMax) => dataMax + (86400000 * 5)]}
+                  tickFormatter={(value) => {
+                    const date = new Date(value);
+                    return `${date.getMonth() + 1}/${date.getDate()}`;
+                  }}
+                  tick={{ fontSize: 10 }}
+                />
+                <YAxis dataKey="paramValue" type="number" />
+                <Tooltip 
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div style={{ 
+                          backgroundColor: 'white', 
+                          padding: '10px', 
+                          border: '1px solid #ccc', 
+                          borderRadius: '4px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        }}>
+                          <p style={{ margin: '2px 0' }}>{`Date: ${data.date}`}</p>
+                          <p style={{ margin: '2px 0' }}>{`Lot: ${data.lotId}`}</p>
+                          <p style={{ margin: '2px 0' }}>{`Model: ${data.modelId}`}</p>
+                          <p style={{ margin: '2px 0' }}>{`${selectedParameter}: ${data.paramValue}`}</p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Legend />
+                {selectedModels.map((modelId) => {
+                  const colors = getModelColors();
                   return (
-                    <ListItem key={factor} disablePadding>
-                      <ListItemButton
-                        selected={selectedParameter === factor}
-                        onClick={() => setSelectedParameter(factor)}
-                      >
-                        <ListItemText 
-                          primary={factor}
-                          secondary={
-                            correlationInfo 
-                              ? `r=${correlationInfo.correlationCoefficient.toFixed(3)} (${correlationInfo.interpretation})`
-                              : ''
-                          }
-                        />
-                      </ListItemButton>
-                    </ListItem>
+                    <Scatter
+                      key={modelId}
+                      name={modelId}
+                      data={getParameterTimeSeriesData().filter(item => item.modelId === modelId)}
+                      fill={colors[modelId]}
+                    />
                   );
                 })}
-              </List>
-            </Paper>
-          </Grid>
-          
-          {/* 우측 상단: 파라미터별 산점도 */}
-          <Grid item xs={12} md={4}>
-            <Paper sx={{ p: 2, height: '400px' }}>
-              <Typography variant="h6" gutterBottom>
-                {selectedParameter ? `${selectedParameter} vs Defect Rate` : '파라미터를 선택하세요'}
-              </Typography>
-              {selectedParameter && (
-                <ResponsiveContainer width="100%" height={300}>
-                  <ScatterChart data={getParameterChartData()}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis 
-                      dataKey="paramValue" 
-                      type="number"
-                      name={selectedParameter}
-                    />
-                    <YAxis 
-                      dataKey="defectRate" 
-                      type="number"
-                      name="Defect Rate"
-                    />
-                    <Tooltip 
-                      formatter={(value, name) => [value, name]}
-                      labelFormatter={(label) => `Lot: ${label}`}
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          const data = payload[0].payload;
-                          return (
-                            <div className="bg-white p-2 border border-gray-300 rounded shadow">
-                              <p>{`Lot: ${data.lotId}`}</p>
-                              <p>{`${selectedParameter}: ${data.paramValue}`}</p>
-                              <p>{`Defect Rate: ${data.defectRate}%`}</p>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                    <Scatter name="Data Points" data={getParameterChartData()} fill="#8884d8" />
-                  </ScatterChart>
-                </ResponsiveContainer>
-              )}
-            </Paper>
-          </Grid>
+              </ScatterChart>
+            </ResponsiveContainer>
+          )}
+        </Paper>
 
-          {/* 우측 하단: Feature Importance */}
-          <Grid item xs={12} md={4}>
-            <Paper sx={{ p: 2, height: '400px' }}>
-              <Typography variant="h6" gutterBottom>
-                Feature Importance
-              </Typography>
-              {featureResult && featureResult.results ? (
-                <>
-                  <div style={{ fontSize: '12px', marginBottom: '10px' }}>
-                    {JSON.stringify(getFeatureImportanceChartData(), null, 2)}
-                  </div>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <BarChart 
-                      data={getFeatureImportanceChartData()} 
-                      layout="vertical"
-                      margin={{ top: 5, right: 30, left: 80, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis 
-                        type="number" 
-                        domain={[0, 'dataMax']}
-                      />
-                      <YAxis 
-                        dataKey="name" 
-                        type="category" 
-                        width={70}
-                        tick={{ fontSize: 11 }}
-                      />
-                      <Tooltip 
-                        content={({ active, payload }) => {
-                          if (active && payload && payload.length) {
-                            const data = payload[0].payload;
-                            return (
-                              <div style={{ 
-                                backgroundColor: 'white', 
-                                padding: '10px', 
-                                border: '1px solid #ccc', 
-                                borderRadius: '4px',
-                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                              }}>
-                                <p style={{ margin: '2px 0' }}>{`Parameter: ${data.name}`}</p>
-                                <p style={{ margin: '2px 0' }}>{`Importance: ${data.formattedImportance}%`}</p>
-                                <p style={{ margin: '2px 0' }}>{`Level: ${data.interpretation}`}</p>
-                              </div>
-                            );
-                          }
-                          return null;
-                        }}
-                      />
-                      <Bar dataKey="importance" fill="#82ca9d" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </>
-              ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 10 }}>
-                  분석을 실행하여 Feature Importance 결과를 확인하세요.
-                </Typography>
-              )}
-            </Paper>
-          </Grid>
-        </Grid>
+        {/* Feature Importance 별도 섹션 */}
+        <Paper sx={{ p: 3, mt: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Feature Importance
+          </Typography>
+          {featureResult && featureResult.results ? (
+            <>
+              <div style={{ fontSize: '12px', marginBottom: '10px' }}>
+                {JSON.stringify(getFeatureImportanceChartData(), null, 2)}
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart 
+                  data={getFeatureImportanceChartData()} 
+                  layout="vertical"
+                  margin={{ top: 5, right: 30, left: 80, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    type="number" 
+                    domain={[0, 'dataMax']}
+                  />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    width={70}
+                    tick={{ fontSize: 11 }}
+                  />
+                  <Tooltip 
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div style={{ 
+                            backgroundColor: 'white', 
+                            padding: '10px', 
+                            border: '1px solid #ccc', 
+                            borderRadius: '4px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                          }}>
+                            <p style={{ margin: '2px 0' }}>{`Parameter: ${data.name}`}</p>
+                            <p style={{ margin: '2px 0' }}>{`Importance: ${data.formattedImportance}%`}</p>
+                            <p style={{ margin: '2px 0' }}>{`Level: ${data.interpretation}`}</p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar dataKey="importance" fill="#82ca9d" />
+                </BarChart>
+              </ResponsiveContainer>
+            </>
+          ) : (
+            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 10 }}>
+              분석을 실행하여 Feature Importance 결과를 확인하세요.
+            </Typography>
+          )}
+        </Paper>
 
         {/* 기존 분석 결과 */}
         <Grid container spacing={3} sx={{ mt: 2 }}>
